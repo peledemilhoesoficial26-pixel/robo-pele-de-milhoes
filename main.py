@@ -1,6 +1,8 @@
 import os
 import telebot
 import re
+import requests
+from bs4 import BeautifulSoup
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -23,117 +25,79 @@ Thread(target=run_web_server, daemon=True).start()
 # CONFIGURAÇÃO DO BOT
 TOKEN = "8751717795:AAHtRIJnEEOhKArso18kRfpBhb48BwUg4Ls"
 AMAZON_TAG = os.environ.get("AMAZON_TAG", "peledemilhoes-20")
-SHOPEE_TAG = os.environ.get("SHOPEE_TAG", "")
+
+# O ID do seu canal que descobrimos!
+ID_CANAL_ALVO = "-1002446714088"
 
 bot = telebot.TeleBot(TOKEN)
-
-# 1. LISTA SUPREMA DE SKINCARE
-MARCAS_SKINCARE = [
-    "vichy", "la roche-posay", "la roche posey", "eucerin", "creamy", "principia", "oceane", 
-    "cerave", "avene", "skinceuticals", "actine", "biore", "dermage", "adcos", "neutrogena", 
-    "cetaphil", "bioderma", "sallve", "the ordinary", "simple organic", "cosrx", "skin1004", 
-    "medicube", "mantecorp", "episol", "epidrat", "blancy", "isdin", "profuse", "rhode", "estee lauder", 
-    "lancome", "clinique", "shiseido", "beauty of joseon", "anua", "round lab", "purito", 
-    "laneige", "some by mi", "beyoung", "meditherapy", "celimax", "galderma", "vt cosmetics", 
-    "darrow", "isntree", "hada labo", "melano cc", "senka", "naturie", "hatomugi", "dhc", "curel", 
-    "d program", "minon amino", "sk-ii", "cle de peau", "decorte", "pola", "cicatribem", 
-    "nupill", "banila co", "innisfree", "dr. jart", "tirtir", "numbuzin", "abib", 
-    "institut esthederm", "loreal", "l'oreal", "kiehl's", "kiehls", "dermotivin", "missha", 
-    "etude house", "glow recipe", "caudalie", "biossance", "drunk elephant", "dr. althea", 
-    "k-secret", "jumiso", "holika homika", "sol de janeiro", "obagi", "sesderma", "neostrata", 
-    "i'm from", "uriage", "oura", "needs", "the inkey list", "summer fridays", "byoma", 
-    "bubble", "mary & may", "skinfood", "a-derma", "aderma", "svr", "rohto", "skin aqua", 
-    "origins", "paula's choice", "paulas choice", "anessa", "aestura", "theraskin", 
-    "torriden", "kose", "softymo", "murad", "malin", "filorga", "mixoon", "tatcha", 
-    "p.calm", "mario badescu", "skincerity", "nu skin", "skyn iceland", "ada tina", 
-    "chasin rabbits", "pyunkang yul", "nuxe", "sulwhasoo", "is clinical", "isclinical", 
-    "kanebo", "suisai", "youth to the people", "melora", "endocare"
-]
-
-# 2. LISTA COMPLETA DE SITES PARCEIROS PERMITIDOS
-SITES_PERMITIDOS = [
-    "amazon.com.br", "amazon.com", "amzn.to", "a.co", "link.amazon",
-    "shopee.com.br", "shopee.com", "shope.ee",
-    "mercadolivre.com.br", "mercadolivre.com", "meli.li",
-    "monetizze.com.br", "casasbahia.com.br", "ponto.com.br", 
-    "extra.com.br", "carrefour.com.br", "magazineluiza.com.br", 
-    "magazinevoce.com.br", "americanas.com.br", "americanas.com",
-    "epocacosmeticos.com.br", "belezanaweb.com.br", "sephora.com.br", 
-    "ikesaki.com.br", "natura.com.br", "oboticario.com.br", "avon.com.br",
-    "drogaraia.com.br", "drogasil.com.br", "drogariasaopaulo.com.br", 
-    "drogariaspacheco.com.br", "paguemenos.com.br", "panvel.com",
-    "drogariaaraujo.com.br", "drogariavenancio.com.br"
-]
 
 def extrair_url_limpa(texto):
     match = re.search(r'(https?://[^\s?#()\[\]]+)', texto)
     if match:
         return match.group(1)
-    return texto.strip()
+    return None
 
-def verificar_se_e_skincare(texto_completo):
-    texto_minusculo = texto_completo.lower()
-    for marca in MARCAS_SKINCARE:
-        if marca in texto_minusculo:
-            return True
-    return False
-
-def verificar_site_permitido(url_produto):
-    url_minuscula = url_produto.lower()
-    for site in SITES_PERMITIDOS:
-        if site in url_minuscula:
-            return True
-    return False
+def puxar_titulo_amazon(url):
+    """ Entra na Amazon e descobre o nome do produto """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            title_tag = soup.find(id="productTitle")
+            if title_tag:
+                return title_tag.get_text().strip()
+    except Exception as e:
+        print(f"Erro ao puxar título: {e}")
+    return "Produto Especial"
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Olá! O robô Pele de Milhões está ativo e atualizado!")
+    bot.reply_to(message, "Olá! Mandando links aqui, eu posto formatado direto no Canal de Ofertas!")
 
 @bot.message_handler(func=lambda message: True)
-def processar_link_oferta(message):
-    texto_bruto = message.text or ""
-    texto_para_analise = texto_bruto
-
-    if message.caption:
-        texto_para_analise += " " + message.caption
-
-    if "http" not in texto_para_analise:
-        return
-        
-    link_limpo = extrair_url_limpa(texto_bruto)
-        
-    if not verificar_site_permitido(link_limpo):
-        bot.reply_to(message, f"⚠️ O site analisado ({link_limpo}) não faz parte das nossas lojas parceiras autorizadas.")
+def processar_e_postar_automatico(message):
+    texto_bruto = message.text or message.caption or ""
+    
+    if "http" not in texto_bruto:
         return
 
-    if not verificar_se_e_skincare(texto_para_analise):
-        bot.reply_to(message, "❌ Link recusado! O produto não pertence a nenhuma marca de skincare da lista.")
+    link_extraido = extrair_url_limpa(texto_bruto)
+    if not link_extraido:
         return
 
-    link_final = link_limpo
-    mensagem_sucesso = "✅ **PRODUTO VALIDADO!**\n\n"
+    is_amazon = any(x in link_extraido for x in ["amazon.com", "amzn.to", "a.co", "link.amazon"])
+    
+    if not is_amazon:
+        bot.reply_to(message, "⚠️ Por enquanto, a postagem automática está calibrada para links Amazon!")
+        return
 
-    # Conversão Automática - AMAZON
-    if any(x in link_limpo for x in ["amazon.com", "amzn.to", "a.co", "link.amazon"]):
-        if "?" in link_limpo:
-            link_final = f"{link_limpo}&tag={AMAZON_TAG}"
-        else:
-            link_final = f"{link_limpo}?tag={AMAZON_TAG}"
-        mensagem_sucesso += f"🛒 **Link de Afiliada Amazon Gerado:**\n{link_final}"
+    status_msg = bot.reply_to(message, "🔄 Buscando dados na Amazon e gerando post... Aguarde!")
 
-    # Conversão Automática - SHOPEE
-    elif "shopee.com" in link_limpo or "shope.ee" in link_limpo:
-        if SHOPEE_TAG:
-            link_final = f"https://shope.ee/ats/{SHOPEE_TAG}?url={link_limpo}"
-            mensagem_sucesso += f"🛍️ **Link de Afiliada Shopee Gerado:**\n{link_final}"
-        else:
-            mensagem_sucesso += f"🛍️ **Link Shopee Aprovado!**\nUse o app da Shopee para converter:\n{link_limpo}"
+    # 1. Pega o título real do produto no site da Amazon
+    titulo_produto = puxar_titulo_amazon(link_extraido)
 
+    # 2. Transforma o link em Link de Afiliada
+    if "?" in link_extraido:
+        link_afiliada = f"{link_extraido}&tag={AMAZON_TAG}"
     else:
-        mensagem_sucesso += f"✨ **Link de Loja Parceira Aprovado!**\nGere manualmente na sua plataforma:\n{link_limpo}"
+        link_afiliada = f"{link_extraido}?tag={AMAZON_TAG}"
 
-    bot.reply_to(message, mensagem_sucesso, parse_mode="Markdown")
+    # 3. Monta o texto com as setinhas e formatação profissional
+    texto_final = f"➜ {titulo_produto}\n\n"
+    texto_final += f"➜ 🔥 Compre aqui: {link_afiliada}\n\n"
+    texto_final += "#anúncio | Pele de Milhões ✨"
+
+    try:
+        # 4. Posta AUTOMATICAMENTE no seu canal
+        bot.send_message(chat_id=ID_CANAL_ALVO, text=texto_final)
+        bot.edit_message_text("✅ Postagem realizada com sucesso direto no Canal!", chat_id=message.chat.id, message_id=status_msg.message_id)
+    except Exception as error:
+        bot.edit_message_text(f"❌ Erro ao postar no canal. Erro: {error}", chat_id=message.chat.id, message_id=status_msg.message_id)
 
 if __name__ == "__main__":
-    print("Robô reiniciado com sucesso...")
+    print("Robô Postador Automático Ativo...")
     bot.infinity_polling()
