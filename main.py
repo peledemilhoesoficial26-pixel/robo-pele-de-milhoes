@@ -1,4 +1,3 @@
-
 import telebot
 
 TOKEN = "8751717795:AAFtz9g0xrUIDYvVhRMCUA9JWEHB3pjsGIo"
