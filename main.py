@@ -87,21 +87,13 @@ def verificar_site_permitido(url_produto):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Olá! O robô Pele de Milhões está pronto para ler links e descrições automáticas!")
+    bot.reply_to(message, "Olá! O robô Pele de Milhões está ativo e atualizado!")
 
 @bot.message_handler(func=lambda message: True)
 def processar_link_oferta(message):
     texto_bruto = message.text or ""
-    
-    # Captura textos extras escondidos no link (como o título e a descrição do preview que o Telegram gera)
     texto_para_analise = texto_bruto
-    if message.entities:
-        for entity in message.entities:
-            if entity.type == "url" and hasattr(message, 'link_preview_options'):
-                # Adiciona metadados se disponíveis para ajudar na validação
-                pass
 
-    # Se o app mandou o título do produto junto, capturamos para a análise
     if message.caption:
         texto_para_analise += " " + message.caption
 
@@ -114,7 +106,6 @@ def processar_link_oferta(message):
         bot.reply_to(message, f"⚠️ O site analisado ({link_limpo}) não faz parte das nossas lojas parceiras autorizadas.")
         return
 
-    # Procura a marca tanto no que você escreveu quanto nas informações extras do link
     if not verificar_se_e_skincare(texto_para_analise):
         bot.reply_to(message, "❌ Link recusado! O produto não pertence a nenhuma marca de skincare da lista.")
         return
@@ -144,5 +135,5 @@ def processar_link_oferta(message):
     bot.reply_to(message, mensagem_sucesso, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Robô calibrado com análise de texto expandida...")
+    print("Robô reiniciado com sucesso...")
     bot.infinity_polling()
