@@ -1,5 +1,6 @@
 import os
 import telebot
+import re
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -19,10 +20,10 @@ def run_web_server():
 # Inicia o servidor em segundo plano
 Thread(target=run_web_server, daemon=True).start()
 
-# CONFIGURAÇÃO DO BOT (Pegando o Token e as Tags de forma 100% segura)
+# CONFIGURAÇÃO DO BOT
 TOKEN = "8751717795:AAHtRIJnEEOhKArso18kRfpBhb48BwUg4Ls"
-AMAZON_TAG = os.environ.get("AMAZON_TAG", "peledemilhoes-20")  # Valor padrão de segurança
-SHOPEE_TAG = os.environ.get("SHOPEE_TAG", "")                  # Será puxado da Render
+AMAZON_TAG = os.environ.get("AMAZON_TAG", "peledemilhoes-20")
+SHOPEE_TAG = os.environ.get("SHOPEE_TAG", "")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -51,7 +52,7 @@ MARCAS_SKINCARE = [
 
 # 2. LISTA COMPLETA DE SITES PARCEIROS PERMITIDOS
 SITES_PERMITIDOS = [
-    "amazon.com.br", "amazon.com", "amzn.to",
+    "amazon.com.br", "amazon.com", "amzn.to", "a.co", "link.amazon",
     "shopee.com.br", "shopee.com", "shope.ee",
     "mercadolivre.com.br", "mercadolivre.com", "meli.li",
     "monetizze.com.br", "casasbahia.com.br", "ponto.com.br", 
@@ -63,6 +64,13 @@ SITES_PERMITIDOS = [
     "drogariaspacheco.com.br", "paguemenos.com.br", "panvel.com",
     "drogariaaraujo.com.br", "drogariavenancio.com.br"
 ]
+
+def extrair_url_limpa(texto):
+    # Procura estritamente por links http ou https isolando de colchetes ou parênteses do Telegram
+    match = re.search(r'(https?://[^\s?#()\[\]]+)', texto)
+    if match:
+        return match.group(1)
+    return texto.strip()
 
 def verificar_se_e_skincare(texto):
     texto_minusculo = texto.lower()
@@ -80,52 +88,50 @@ def verificar_site_permitido(url_produto):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Olá! O robô Pele de Milhões está online, 100% seguro e pronto para processar seus links de Skincare!")
+    bot.reply_to(message, "Olá! O robô Pele de Milhões está online e totalmente calibrado para links limpos!")
 
-# COMANDO CENTRAL: PROCESSADOR DE LINKS DE OFERTAS
 @bot.message_handler(func=lambda message: True)
 def processar_link_oferta(message):
-    texto_mensagem = message.text
+    texto_bruto = message.text
     
-    if "http" not in texto_mensagem:
-        return  # Ignora se não for um link
+    if "http" not in texto_bruto:
+        return
         
-    if not verificar_site_permitido(texto_mensagem):
-        bot.reply_to(message, "⚠️ Este site não faz parte das nossas lojas parceiras autorizadas.")
+    # Limpa de forma cirúrgica o link de qualquer caractere oculto do app
+    link_limpo = extrair_url_limpa(texto_bruto)
+        
+    if not verificar_site_permitido(link_limpo):
+        bot.reply_to(message, f"⚠️ O site analisado ({link_limpo}) não faz parte das nossas lojas parceiras autorizadas.")
         return
 
-    if not verificar_se_e_skincare(texto_mensagem):
-        bot.reply_to(message, "❌ Link recusado! O produto ou o texto não pertence a nenhuma marca de skincare da nossa lista.")
+    if not verificar_se_e_skincare(texto_bruto):
+        bot.reply_to(message, "❌ Link recusado! O produto não pertence a nenhuma marca de skincare da lista.")
         return
 
-    # Se chegou aqui, passou nos filtros! Hora de converter
-    link_bruto = texto_mensagem.strip()
-    link_final = link_bruto
+    link_final = link_limpo
     mensagem_sucesso = "✅ **PRODUTO VALIDADO!**\n\n"
 
     # Conversão Automática - AMAZON
-    if "amazon.com" in link_bruto or "amzn.to" in link_bruto:
-        if "?" in link_bruto:
-            link_final = f"{link_bruto}&tag={AMAZON_TAG}"
+    if any(x in link_limpo for x in ["amazon.com", "amzn.to", "a.co", "link.amazon"]):
+        if "?" in link_limpo:
+            link_final = f"{link_limpo}&tag={AMAZON_TAG}"
         else:
-            link_final = f"{link_bruto}?tag={AMAZON_TAG}"
+            link_final = f"{link_limpo}?tag={AMAZON_TAG}"
         mensagem_sucesso += f"🛒 **Link de Afiliada Amazon Gerado:**\n{link_final}"
 
     # Conversão Automática - SHOPEE
-    elif "shopee.com" in link_bruto or "shope.ee" in link_bruto:
+    elif "shopee.com" in link_limpo or "shope.ee" in link_limpo:
         if SHOPEE_TAG:
-            # Estrutura padrão de redirecionamento de afiliados da Shopee
             link_final = f"https://shope.ee/ats/{SHOPEE_TAG}?url={link_bruto}"
             mensagem_sucesso += f"🛍️ **Link de Afiliada Shopee Gerado:**\n{link_final}"
         else:
-            mensagem_sucesso += f"🛍️ **Link Shopee Aprovado!**\nComo sua Tag da Shopee não foi configurada na Render, use o app da Shopee para gerar o sublink com segurança:\n{link_bruto}"
+            mensagem_sucesso += f"🛍️ **Link Shopee Aprovado!**\nUse o app da Shopee para converter:\n{link_limpo}"
 
-    # Outras plataformas (Awin, Lomadee, Mercado Livre)
     else:
-        mensagem_sucesso += f"✨ **Link de Loja Parceira Aprovado!**\nGere o seu link de comissão direto na plataforma correspondente (Awin/Lomadee/Meli) para este produto:\n{link_bruto}"
+        mensagem_sucesso += f"✨ **Link de Loja Parceira Aprovado!**\nGere manualmente na sua plataforma:\n{link_limpo}"
 
-    bot.reply_to(message, mensaje_sucesso, parse_mode="Markdown")
+    bot.reply_to(message, mensagem_sucesso, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Robô de Skincare atualizado com sucesso...")
+    print("Robô atualizado com filtro de link definitivo...")
     bot.infinity_polling()
