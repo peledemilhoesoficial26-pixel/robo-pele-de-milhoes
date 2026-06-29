@@ -27,7 +27,8 @@ TOKEN = "8751717795:AAHtRIJnEEOhKArso18kRfpBhb48BwUg4Ls"
 AMAZON_TAG = os.environ.get("AMAZON_TAG", "peledemilhoes-20")
 
 # O ID do seu canal que descobrimos!
-ID_CANAL_ALVO = "-1002220302271"
+ID_CANAL_ALVO = "@testepeledemilhoes123"
+
 
 
 bot = telebot.TeleBot(TOKEN)
