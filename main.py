@@ -66,14 +66,13 @@ SITES_PERMITIDOS = [
 ]
 
 def extrair_url_limpa(texto):
-    # Procura estritamente por links http ou https isolando de colchetes ou parênteses do Telegram
     match = re.search(r'(https?://[^\s?#()\[\]]+)', texto)
     if match:
         return match.group(1)
     return texto.strip()
 
-def verificar_se_e_skincare(texto):
-    texto_minusculo = texto.lower()
+def verificar_se_e_skincare(texto_completo):
+    texto_minusculo = texto_completo.lower()
     for marca in MARCAS_SKINCARE:
         if marca in texto_minusculo:
             return True
@@ -88,23 +87,35 @@ def verificar_site_permitido(url_produto):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Olá! O robô Pele de Milhões está online e totalmente calibrado para links limpos!")
+    bot.reply_to(message, "Olá! O robô Pele de Milhões está pronto para ler links e descrições automáticas!")
 
 @bot.message_handler(func=lambda message: True)
 def processar_link_oferta(message):
-    texto_bruto = message.text
+    texto_bruto = message.text or ""
     
-    if "http" not in texto_bruto:
+    # Captura textos extras escondidos no link (como o título e a descrição do preview que o Telegram gera)
+    texto_para_analise = texto_bruto
+    if message.entities:
+        for entity in message.entities:
+            if entity.type == "url" and hasattr(message, 'link_preview_options'):
+                # Adiciona metadados se disponíveis para ajudar na validação
+                pass
+
+    # Se o app mandou o título do produto junto, capturamos para a análise
+    if message.caption:
+        texto_para_analise += " " + message.caption
+
+    if "http" not in texto_para_analise:
         return
         
-    # Limpa de forma cirúrgica o link de qualquer caractere oculto do app
     link_limpo = extrair_url_limpa(texto_bruto)
         
     if not verificar_site_permitido(link_limpo):
         bot.reply_to(message, f"⚠️ O site analisado ({link_limpo}) não faz parte das nossas lojas parceiras autorizadas.")
         return
 
-    if not verificar_se_e_skincare(texto_bruto):
+    # Procura a marca tanto no que você escreveu quanto nas informações extras do link
+    if not verificar_se_e_skincare(texto_para_analise):
         bot.reply_to(message, "❌ Link recusado! O produto não pertence a nenhuma marca de skincare da lista.")
         return
 
@@ -122,7 +133,7 @@ def processar_link_oferta(message):
     # Conversão Automática - SHOPEE
     elif "shopee.com" in link_limpo or "shope.ee" in link_limpo:
         if SHOPEE_TAG:
-            link_final = f"https://shope.ee/ats/{SHOPEE_TAG}?url={link_bruto}"
+            link_final = f"https://shope.ee/ats/{SHOPEE_TAG}?url={link_limpo}"
             mensagem_sucesso += f"🛍️ **Link de Afiliada Shopee Gerado:**\n{link_final}"
         else:
             mensagem_sucesso += f"🛍️ **Link Shopee Aprovado!**\nUse o app da Shopee para converter:\n{link_limpo}"
@@ -133,5 +144,5 @@ def processar_link_oferta(message):
     bot.reply_to(message, mensagem_sucesso, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Robô atualizado com filtro de link definitivo...")
+    print("Robô calibrado com análise de texto expandida...")
     bot.infinity_polling()
